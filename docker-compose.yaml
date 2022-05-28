@@ -1,0 +1,51 @@
+version: "3.2"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    
+  rabbit-scripts:
+    image: rabbit-scripts:latest
+    build:
+      context: .
+      dockerfile: docker/db.Dockerfile
+    depends_on:
+      - rabbitmq
+
+  post-producer:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
+      - rabbitmq
+      - rabbit-scripts
+    command: post_producer
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - POSTS_FILE=/var/data/the-reddit-irl-dataset-posts.csv
+    volumes:
+      - ${PWD}/data:/var/data
+
+  score-extractor:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
+      - rabbitmq
+      - rabbit-scripts
+    command: score_extractor
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    
+  mean-calculator:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
+      - rabbitmq
+      - rabbit-scripts
+    command: mean_calculator
+    environment:
+      - RABBITMQ_HOST=rabbitmq
