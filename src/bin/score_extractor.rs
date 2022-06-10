@@ -4,7 +4,7 @@ use amiquip::{
 use envconfig::Envconfig;
 use log::{debug, error, info};
 use tp2::messages::Message;
-use tp2::{POST_SCORES_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME, Config};
+use tp2::{Config, POST_SCORES_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();

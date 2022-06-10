@@ -12,4 +12,5 @@ pub enum Message {
     PostId(String),
     PostUrl(String, String),
     PostIdSentiment(String, f32),
+    CollegePostUrl(String),
 }

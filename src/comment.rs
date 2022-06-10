@@ -31,7 +31,9 @@ impl Comment {
             permalink: record.get(6)?.to_string(),
             body: record.get(7)?.to_string(),
             sentiment: str::parse::<f32>(record.get(8)?).unwrap_or(0.0),
-            score: str::parse::<u32>(record.get(9)?).expect("Score is invalid"),
+            //score: str::parse::<u32>(record.get(9)?).expect("Score is invalid"),
+            score: str::parse::<u32>(record.get(9)?).unwrap_or(0),
+
         })
     }
 

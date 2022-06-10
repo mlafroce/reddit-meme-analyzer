@@ -4,7 +4,7 @@ use amiquip::{
 use envconfig::Envconfig;
 use log::{debug, error, info, warn};
 use tp2::messages::Message;
-use tp2::{Config, POST_URL_QUEUE_NAME};
+use tp2::{Config, POST_EXTRACTED_URL_QUEUE_NAME, POST_URL_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -40,7 +40,7 @@ fn run_service(config: Config) -> Result<()> {
                 Ok(Message::EndOfStream) => {
                     exchange.publish(Publish::new(
                         &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        POST_URL_QUEUE_NAME,
+                        POST_EXTRACTED_URL_QUEUE_NAME,
                     ))?;
                     consumer.ack(delivery)?;
                     break;
@@ -49,7 +49,7 @@ fn run_service(config: Config) -> Result<()> {
                     let score = Message::PostUrl(post.id, post.url);
                     exchange.publish(Publish::new(
                         &bincode::serialize(&score).unwrap(),
-                        POST_URL_QUEUE_NAME,
+                        POST_EXTRACTED_URL_QUEUE_NAME,
                     ))?;
                 }
                 Ok(_) => {

@@ -41,12 +41,9 @@ fn run_service(config: Config) -> Result<()> {
         if let ConsumerMessage::Delivery(delivery) = consumer_message {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
-                    debug!(
-                        "End of stream received, should send post mean sentiment {:?}",
-                        post_sentiments_map
-                    );
+                    let post_sentiment = get_highest_post_sentiment(&post_sentiments_map);
                     let body =
-                        bincode::serialize(&Message::PostIdSentiment("".to_string(), 0.0)).unwrap();
+                        bincode::serialize(&Message::PostIdSentiment(post_sentiment.0, post_sentiment.1)).unwrap();
                     exchange.publish(Publish::new(&body, POST_SENTIMENT_MEAN_QUEUE_NAME))?;
                     consumer.ack(delivery)?;
                     break;
@@ -65,4 +62,17 @@ fn run_service(config: Config) -> Result<()> {
     }
     info!("Exit");
     connection.close()
+}
+
+fn get_highest_post_sentiment(sentiment_map: &HashMap<String, (f32, i32)>) -> (String, f32) {
+    let mut highest_id = "".to_string();
+    let mut highest = -1.0;
+    for (id, sentiment) in sentiment_map.iter() {
+        let sentiment_mean = sentiment.0 / sentiment.1 as f32;
+        if sentiment_mean > highest {
+            highest = sentiment_mean;
+            highest_id = id.clone();
+        }
+    }
+    (highest_id, highest)
 }

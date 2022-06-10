@@ -4,7 +4,7 @@ use amiquip::{
 use envconfig::Envconfig;
 use log::{debug, error, info};
 use tp2::messages::Message;
-use tp2::{COMMENT_COLLEGE_QUEUE_NAME, Config, POST_ID_COLLEGE_QUEUE_NAME};
+use tp2::{Config, COMMENT_COLLEGE_QUEUE_NAME, POST_ID_COLLEGE_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();

@@ -2,6 +2,11 @@ version: "3.2"
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 1s
+      timeout: 3s
+      retries: 30
     
   rabbit-scripts:
     image: rabbit-scripts:latest
@@ -11,41 +16,52 @@ services:
     depends_on:
       - rabbitmq
 
-  post-producer:
+  results_consumer:
     image: memes-nodes:latest
     build:
       context: .
       dockerfile: docker/nodes.Dockerfile
     depends_on:
-      - rabbitmq
+      - rabbit-scripts
+    command: results_consumer
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - OUTPUT_path=/var/data/output.txt
+    volumes:
+      - ${PWD}/data/output.txt:/var/data/output.txt
+
+  mean_calculator:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
+      - results_consumer
+    command: mean_calculator
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+
+  score_extractor:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
+      - mean_calculator
+    command: score_extractor
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+
+  post_producer:
+    image: memes-nodes:latest
+    build:
+      context: .
+      dockerfile: docker/nodes.Dockerfile
+    depends_on:
       - rabbit-scripts
     command: post_producer
     environment:
       - RABBITMQ_HOST=rabbitmq
       - POSTS_FILE=/var/data/the-reddit-irl-dataset-posts.csv
     volumes:
-      - ${PWD}/data:/var/data
-
-  score-extractor:
-    image: memes-nodes:latest
-    build:
-      context: .
-      dockerfile: docker/nodes.Dockerfile
-    depends_on:
-      - rabbitmq
-      - rabbit-scripts
-    command: score_extractor
-    environment:
-      - RABBITMQ_HOST=rabbitmq
-    
-  mean-calculator:
-    image: memes-nodes:latest
-    build:
-      context: .
-      dockerfile: docker/nodes.Dockerfile
-    depends_on:
-      - rabbitmq
-      - rabbit-scripts
-    command: mean_calculator
-    environment:
-      - RABBITMQ_HOST=rabbitmq
+      - ${PWD}/data/the-reddit-irl-dataset-posts-head.csv:/var/data/the-reddit-irl-dataset-posts.csv

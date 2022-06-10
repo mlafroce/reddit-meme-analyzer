@@ -1,32 +1,58 @@
 # Reddit meme analyzer
 
-## DAG de entidades
+## Introducción
 
-![Grafo de entidades](dag.png)
+*Reddit meme analyzer* es un sistema distribuido de analisis de posts y comentarios de Reddit acerca de memes. El mismo está compuesto por un cliente, un servidor RabbitMQ, y múltiples servicios que operan sobre el stream de posts y de comentarios, transformando los datos y comunicándose mediante intercambio de mensajes:
 
-En celeste las entidades trivialmente paralelizables utilizando particionado (por no poseer estado o porque el resultado  puede ser particionado y unificado con facilidad)
 
-En rojo las entidades que no pueden ser fácilmente paralelizables. Por ejemplo, el calculador de mediana necesita otra entidad que tome todas las medianas y calcule una general.
-El caso de Best Meme filter podría ser paralelizable, pero necesitaría otra entidad que ordene los resultados particionados.
+## Descripción de los servicios
 
-El caso de `college comments filter` podría paralelizarse por palabras a buscar, pero generaría un overhead de mensajes considerable.
+![Diagrama de robustez](robustez.pdf){width=80%}
 
-### Entidades
+En este diagrama podemos ver todos los servicios que componen los 3 flujos de datos.
 
-Cada entidad es una aplicación aparte, que se compila y ejecuta con el comando
+El cliente inicia un proceso **Data loader**, que se conecta mediante TCP a los servicios **Post producer** y **Comment producer**. Estos servicios recibe los datos en forma de csv y envían los objetos completos al servidor RabbitMQ.
 
-```bash
-cargo run --bin <nombre>
-```
+En el cálculo del score medio total, el proceso **Score extractor** los posts y encola unicamente el score correspondiente. El proceso **Total mean calculator** desencola estos scores y calcula la mediana.
 
-Las entidades presentes son
+En la extraccion de posts relacionados con *college*, tenemos por un lado que **College comments filter** nos filtra los comentarios que contienen la palabra *College*, y los encola para que el filtro **College posts filter** los desencole. Cuando se termina de filtrar los *post_id* de todos los comentarios empiezo a consumir *Posts con score arriba de la mediana*. Estos son encolados por **Posts above average filter**, que funciona primero recibiendo la mediana de **Total mean calculator** y luego filtrando los posts del *post producer*.
 
-* `post_producer`: fuente de posts, genera `FullPost`s.
-* `comment_producer`: fuente de comments, genera `FullComment`s.
-* `url_extractor`: recibe `FullPost`s y los extrae Id y Url en un mensaje `PostUrl`.
-* `score_extractor`: recibe `FullPost`s y extrae el Score en un mensaje `PostScore`.
-* `mean_calculator`: recibe `FullScore`s y calcula la mediana generando un `PostScoreMean`.
-* `best_meme_filter`: primero recibe los sentiments de los posts (mensajes PostSentiment), se queda con el mejor, y luego recibe los mensajes `PostUrl`, para obtener la url del post con más alto sentiment.
-* `comment_sentiment_extractor`: recibe `FullComment`s y extrae el sentiment y postId asociado, generando un `PostIdSentiment`.
-* `post_sentiment_calculator`: recibe `PostIdSentiment`s por comentario y calcula la mediana por postId un `PostIdSentiment`.
-* `result_consumer`: recibe `FullScore`s y calcula la mediana generando un `PostScoreMean`.
+El último flujo es el de "Best meme". Para este, primero extraemos el sentiment de los comentarios con **Comment sentiment extractor**, y luego calculamos la media por post con **Post sentiment calculator**. Finalmente enviamos el Id del post con sentiment más alto. Este id lo usamos para filtrar los memes provenientes de **Meme Url extractor**.
+
+
+Los 3 flujos encolan el resultado en una cola de resultados para que Result consumer los baje a disco.
+
+## Modelo de comunicación
+
+![Diagrama de paquetes](paquetes.pdf){width=80%}
+
+Cada servicio está compilado junto al modelo de la aplicación (Estructuras como `Post`, `Comment`, y un enumerado compuesto `Message` con las distintas variantes de mensajes entre servicios).
+
+Además, se hace uso de la biblioteca **bincode**, que serializa estas estructuras en código binario.
+Primero envía un entero de 64 bits para indicar el tipo de mensaje, y luego envía los atributos del enumerado compuesto que sean necesarios. Los strings se envían con largo preconcatenado.
+
+Por último, para conectarse al servidor RabbitMQ se hace uso de la biblioteca **amiquip**. La misma es de caracter sincrónico, lo que facilita el manejo de errores en comparación a variantes *async*. 
+
+## Carga de datos
+
+![Diagrama de secuencia](secuencia.pdf){width=80%}
+
+Para cargar los datos, el cliente inicia el proceso Data loader. Este proceso se conecta mediante protocolo TCP al Post producer y envía el CSV crudo al servidor. El proceso Post producer **transforma** estas lineas de CSV en mensajes para el servidor RabbitMQ, y lee del stream hasta agotar el stream de datos. Una vez agotado el stream, se envía el mensaje `EndOfStream`
+Una vez enviados los posts, el proceso Data Loader se conecta con el Comment producer y realiza la misma acción con los comments.
+
+Cabe aclara que el orden de los posts y comments es indistinto, pudiéndose hacer en paralelo.
+
+## Comunicación entre servicios
+
+![Diagrama de actividades](actividades.pdf){width=80%}
+
+
+## Despliegue de servicios
+
+![Diagrama de despliegue](despliegue.pdf){width=80%}
+
+Se propone que la aplicación data loader se ejecute en el equipo del cliente que quiere extraer métricas. Este debe poder conectarse de forma directa tanto a *PostProducer* como a *CommentProducer*, que son los únicos servicios con puertos expuestos al usuario.
+
+Por otra parte, debe haber un servidor de RabbitMQ presente en el sistema. Todos los servicios deben poder comunicarse con este servidor de RabbitMQ.
+
+No es necesario que los servicios estén ubicados en el mismo nodo, pero facilita la sincronización a la hora de activarlos.

@@ -6,7 +6,7 @@ use envconfig::Envconfig;
 use log::{debug, error, info};
 use std::collections::HashSet;
 use tp2::messages::Message;
-use tp2::{COLLEGE_MEME_SINK_QUEUE_NAME, Config, POST_ID_COLLEGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME};
+use tp2::{Config, POST_ID_COLLEGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME, RESULTS_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -24,7 +24,9 @@ fn run_service(config: Config) -> Result<()> {
     debug!("Connecting to: {}", host_addr);
     let mut connection = Connection::insecure_open(&host_addr)?;
     let channel = connection.open_channel(None)?;
+    info!("Getting college post ids");
     let ids = get_college_posts_ids(&channel)?;
+    info!("Filtering college posts");
     filter_college_posts(channel, ids)?;
     info!("Exit");
     connection.close()
@@ -37,7 +39,6 @@ fn get_college_posts_ids(channel: &Channel) -> Result<HashSet<String>> {
     };
     let queue = channel.queue_declare(POST_ID_COLLEGE_QUEUE_NAME, options)?;
     let consumer = queue.consume(ConsumerOptions::default())?;
-    let _exchange = Exchange::direct(&channel);
     let mut ids = HashSet::new();
     for consumer_message in consumer.receiver().iter() {
         if let ConsumerMessage::Delivery(delivery) = consumer_message {
@@ -73,19 +74,21 @@ fn filter_college_posts(channel: Channel, _ids: HashSet<String>) -> Result<HashS
         if let ConsumerMessage::Delivery(delivery) = consumer_message {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
+                    info!("Post college ended, sending EOS");
                     exchange.publish(Publish::new(
                         &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        COLLEGE_MEME_SINK_QUEUE_NAME,
+                        RESULTS_QUEUE_NAME,
                     ))?;
                     consumer.ack(delivery)?;
                     break;
                 }
-                Ok(Message::PostUrl(id, _url)) => {
+                Ok(Message::PostUrl(id, url)) => {
+                    info!("Post college received {}", url);
                     if ids.contains(&id) {
-                        // Redirect message
+                        let url = Message::CollegePostUrl(url);
                         exchange.publish(Publish::new(
-                            &bincode::serialize(&delivery.body).unwrap(),
-                            COLLEGE_MEME_SINK_QUEUE_NAME,
+                            &bincode::serialize(&url).unwrap(),
+                            RESULTS_QUEUE_NAME,
                         ))?;
                     }
                 }

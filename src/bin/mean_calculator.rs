@@ -4,7 +4,7 @@ use amiquip::{
 use envconfig::Envconfig;
 use log::{debug, error, info};
 use tp2::messages::Message;
-use tp2::{Config, MEAN_SCORE_SINK_QUEUE_NAME, POST_SCORE_AVERAGE_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME};
+use tp2::{Config, POST_SCORE_AVERAGE_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME, RESULTS_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -41,12 +41,12 @@ fn run_service(config: Config) -> Result<()> {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
                     let mean = score_sum as f32 / count as f32;
-                    debug!("End of stream received, sending mean: {}", mean);
+                    info!("End of stream received, sending mean: {}", mean);
                     //
                     // FIXME! Use fanout exchange
                     //
                     let body = bincode::serialize(&Message::PostScoreMean(mean)).unwrap();
-                    exchange.publish(Publish::new(&body, MEAN_SCORE_SINK_QUEUE_NAME))?;
+                    exchange.publish(Publish::new(&body, RESULTS_QUEUE_NAME))?;
                     exchange.publish(Publish::new(&body, POST_SCORE_AVERAGE_QUEUE_NAME))?;
                     consumer.ack(delivery)?;
                     break;
