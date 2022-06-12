@@ -47,12 +47,13 @@ fn run_service(config: Config) -> Result<()> {
                 }
                 Ok(Message::FullComment(comment)) => {
                     if let Some(post_id) = comment.parse_post_id() {
-                        let msg = Message::PostIdSentiment(post_id, comment.sentiment);
-                        debug!("Publishing {:?}", msg);
-                        exchange.publish(Publish::new(
-                            &bincode::serialize(&msg).unwrap(),
-                            POST_ID_SENTIMENT_QUEUE_NAME,
-                        ))?;
+                        if let Ok(sentiment) = str::parse::<f32>(&comment.sentiment) {
+                            let msg = Message::PostIdSentiment(post_id, sentiment);
+                            exchange.publish(Publish::new(
+                                &bincode::serialize(&msg).unwrap(),
+                                POST_ID_SENTIMENT_QUEUE_NAME,
+                            ))?;
+                        }
                     }
                 }
                 _ => {

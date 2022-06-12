@@ -4,7 +4,9 @@ use amiquip::{
 use envconfig::Envconfig;
 use log::{debug, error, info, warn};
 use tp2::messages::Message;
-use tp2::{Config, POST_EXTRACTED_URL_QUEUE_NAME, POST_URL_QUEUE_NAME};
+use tp2::{
+    Config, POST_EXTRACTED_URL_QUEUE_NAME, POST_ID_WITH_URL_QUEUE_NAME, POST_URL_QUEUE_NAME,
+};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -42,15 +44,26 @@ fn run_service(config: Config) -> Result<()> {
                         &bincode::serialize(&Message::EndOfStream).unwrap(),
                         POST_EXTRACTED_URL_QUEUE_NAME,
                     ))?;
+                    exchange.publish(Publish::new(
+                        &bincode::serialize(&Message::EndOfStream).unwrap(),
+                        POST_ID_WITH_URL_QUEUE_NAME,
+                    ))?;
                     consumer.ack(delivery)?;
                     break;
                 }
                 Ok(Message::FullPost(post)) => {
-                    let score = Message::PostUrl(post.id, post.url);
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&score).unwrap(),
-                        POST_EXTRACTED_URL_QUEUE_NAME,
-                    ))?;
+                    if post.url.starts_with("https") {
+                        let score = Message::PostUrl(post.id.clone(), post.url);
+                        exchange.publish(Publish::new(
+                            &bincode::serialize(&score).unwrap(),
+                            POST_EXTRACTED_URL_QUEUE_NAME,
+                        ))?;
+                        let id = Message::PostId(post.id);
+                        exchange.publish(Publish::new(
+                            &bincode::serialize(&id).unwrap(),
+                            POST_ID_WITH_URL_QUEUE_NAME,
+                        ))?;
+                    }
                 }
                 Ok(_) => {
                     // Todo Notify invalid messages?

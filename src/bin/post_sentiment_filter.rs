@@ -6,7 +6,10 @@ use envconfig::Envconfig;
 use log::{debug, error, info};
 use std::collections::HashSet;
 use tp2::messages::Message;
-use tp2::{Config, POST_ID_COLLEGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME, RESULTS_QUEUE_NAME};
+use tp2::{
+    Config, FILTERED_POST_ID_SENTIMENT_QUEUE_NAME, POST_ID_SENTIMENT_QUEUE_NAME,
+    POST_ID_WITH_URL_QUEUE_NAME,
+};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -24,20 +27,20 @@ fn run_service(config: Config) -> Result<()> {
     debug!("Connecting to: {}", host_addr);
     let mut connection = Connection::insecure_open(&host_addr)?;
     let channel = connection.open_channel(None)?;
-    info!("Getting college post ids");
-    let ids = get_college_posts_ids(&channel)?;
-    info!("Filtering college posts");
-    filter_college_posts(channel, ids)?;
+    info!("Getting post ids with url");
+    let ids = get_posts_ids_with_url(&channel)?;
+    info!("Filtering sentiments with url");
+    filter_posts_with_urls(channel, ids)?;
     info!("Exit");
     connection.close()
 }
 
-fn get_college_posts_ids(channel: &Channel) -> Result<HashSet<String>> {
+fn get_posts_ids_with_url(channel: &Channel) -> Result<HashSet<String>> {
     let options = QueueDeclareOptions {
         auto_delete: false,
         ..QueueDeclareOptions::default()
     };
-    let queue = channel.queue_declare(POST_ID_COLLEGE_QUEUE_NAME, options)?;
+    let queue = channel.queue_declare(POST_ID_WITH_URL_QUEUE_NAME, options)?;
     let consumer = queue.consume(ConsumerOptions::default())?;
     let mut ids = HashSet::new();
     for consumer_message in consumer.receiver().iter() {
@@ -60,32 +63,34 @@ fn get_college_posts_ids(channel: &Channel) -> Result<HashSet<String>> {
     Ok(ids)
 }
 
-fn filter_college_posts(channel: Channel, ids: HashSet<String>) -> Result<HashSet<String>> {
+fn filter_posts_with_urls(channel: Channel, ids: HashSet<String>) -> Result<HashSet<String>> {
     let options = QueueDeclareOptions {
         auto_delete: false,
         ..QueueDeclareOptions::default()
     };
-    let queue = channel.queue_declare(POST_URL_AVERAGE_QUEUE_NAME, options)?;
+    let queue = channel.queue_declare(POST_ID_SENTIMENT_QUEUE_NAME, options)?;
     let consumer = queue.consume(ConsumerOptions::default())?;
     let exchange = Exchange::direct(&channel);
 
+    let mut count = 0;
     for consumer_message in consumer.receiver().iter() {
         if let ConsumerMessage::Delivery(delivery) = consumer_message {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
                     exchange.publish(Publish::new(
                         &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        RESULTS_QUEUE_NAME,
+                        FILTERED_POST_ID_SENTIMENT_QUEUE_NAME,
                     ))?;
                     consumer.ack(delivery)?;
                     break;
                 }
-                Ok(Message::PostUrl(id, url)) => {
-                    if ids.contains(&id) {
-                        let url = Message::CollegePostUrl(url);
+                Ok(Message::PostIdSentiment(post_id, sentiment)) => {
+                    count += 1;
+                    if ids.contains(&post_id) {
+                        let msg = Message::PostIdSentiment(post_id, sentiment);
                         exchange.publish(Publish::new(
-                            &bincode::serialize(&url).unwrap(),
-                            RESULTS_QUEUE_NAME,
+                            &bincode::serialize(&msg).unwrap(),
+                            FILTERED_POST_ID_SENTIMENT_QUEUE_NAME,
                         ))?;
                     }
                 }
@@ -96,5 +101,6 @@ fn filter_college_posts(channel: Channel, ids: HashSet<String>) -> Result<HashSe
             consumer.ack(delivery)?;
         }
     }
+    info!("Filtered {} posts", count);
     Ok(ids)
 }

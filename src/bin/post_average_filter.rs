@@ -1,8 +1,13 @@
-use amiquip::{Channel, Connection, ConsumerMessage, ConsumerOptions, Error, Exchange, Publish, QueueDeclareOptions, Result};
+use amiquip::{
+    Channel, Connection, ConsumerMessage, ConsumerOptions, Error, Exchange, Publish,
+    QueueDeclareOptions, Result,
+};
 use envconfig::Envconfig;
 use log::{debug, error, info};
 use tp2::messages::Message;
-use tp2::{Config, POST_COLLEGE_QUEUE_NAME, POST_SCORE_AVERAGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME};
+use tp2::{
+    Config, POST_COLLEGE_QUEUE_NAME, POST_SCORE_AVERAGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME,
+};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -41,7 +46,7 @@ fn run_service(config: Config) -> Result<()> {
             let message = bincode::deserialize::<Message>(&delivery.body);
             match message {
                 Ok(Message::FullPost(post)) => {
-                    if post.score as f32 > score_average {
+                    if post.score as f32 > score_average && post.url.starts_with("https") {
                         let msg = Message::PostUrl(post.id, post.url);
                         let body = bincode::serialize(&msg).unwrap();
                         exchange.publish(Publish::new(&body, POST_URL_AVERAGE_QUEUE_NAME))?;

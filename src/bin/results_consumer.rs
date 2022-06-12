@@ -60,7 +60,6 @@ fn run_service(config: Config, output_path: String) -> Result<()> {
                     data_received.1 = true;
                 }
                 Ok(Message::CollegePostUrl(url)) => {
-                    info!("got college post url: {:?}", url);
                     results.college_posts.push(url);
                 }
                 Ok(Message::EndOfStream) => {
@@ -75,7 +74,6 @@ fn run_service(config: Config, output_path: String) -> Result<()> {
                 }
             }
             consumer.ack(delivery)?;
-            info!("Data received?: {:?}", data_received);
             if data_received.0 && data_received.1 && data_received.2 {
                 break;
             }

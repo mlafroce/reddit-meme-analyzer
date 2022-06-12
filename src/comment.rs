@@ -1,7 +1,7 @@
 use csv::{Reader, ReaderBuilder, StringRecord};
 use lazy_static::lazy_static;
 use log::debug;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 
@@ -16,8 +16,8 @@ pub struct Comment {
     created: u64,
     permalink: String,
     body: String,
-    pub sentiment: f32,
-    pub score: u32,
+    pub sentiment: String,
+    score: String,
 }
 
 impl Comment {
@@ -30,10 +30,9 @@ impl Comment {
             created: str::parse::<u64>(record.get(5)?).expect("Created timestamp is invalid"),
             permalink: record.get(6)?.to_string(),
             body: record.get(7)?.to_string(),
-            sentiment: str::parse::<f32>(record.get(8)?).unwrap_or(0.0),
+            sentiment: record.get(8)?.to_string(),
             //score: str::parse::<u32>(record.get(9)?).expect("Score is invalid"),
-            score: str::parse::<u32>(record.get(9)?).unwrap_or(0),
-
+            score: record.get(9)?.to_string(),
         })
     }
 
@@ -49,7 +48,10 @@ impl Comment {
     pub fn is_college_related(&self) -> bool {
         lazy_static! {
             /// Avoid compiling the same regex everytime
-            static ref COLLEGE_RELATED_REGEX: Regex = Regex::new(COLLEGE_WORDS).unwrap();
+            static ref COLLEGE_RELATED_REGEX: Regex = RegexBuilder::new(COLLEGE_WORDS)
+                .case_insensitive(true)
+                .build()
+                .expect("Invalid Regex");
         }
         COLLEGE_RELATED_REGEX.is_match(&self.body)
     }

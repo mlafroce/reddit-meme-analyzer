@@ -1,0 +1,13 @@
+killall results_consumer
+killall mean_calculator
+killall score_extractor
+killall comment_sentiment_extractor
+killall post_sentiment_calculator
+killall post_sentiment_filter
+killall url_extractor
+killall best_meme_filter
+killall comment_college_filter
+killall post_college_filter
+killall post_average_filter
+killall post_producer
+killall comment_producer

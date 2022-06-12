@@ -37,25 +37,23 @@ pub const POST_URL_QUEUE_NAME: &str = "tp2.posts.url_src";
 pub const POST_URL_AVERAGE_QUEUE_NAME: &str = "tp2.posts.above_average";
 /// Queue with posts urls for best meme
 pub const POST_EXTRACTED_URL_QUEUE_NAME: &str = "tp2.posts.urls";
+/// Queue with ids of posts with urls
+pub const POST_ID_WITH_URL_QUEUE_NAME: &str = "tp2.posts.urls.id";
 /// Input for the mean calculator
 pub const POST_SCORE_MEAN_QUEUE_NAME: &str = "tp2.posts.mean";
 /// Input of college posts filter. Output of the mean calculator
 pub const POST_SCORE_AVERAGE_QUEUE_NAME: &str = "tp2.posts.mean.result";
 /// Input of comment sentiment extractor
 pub const COMMENT_SENTIMENT_QUEUE_NAME: &str = "tp2.comments.sentiment_src";
-/// Input of post sentiment calculator. Output of comment sentiment extractor.
+/// Input of post sentiment filter. Output of comment sentiment extractor.
 pub const POST_ID_SENTIMENT_QUEUE_NAME: &str = "tp2.posts.sentiment";
+/// Input of post sentiment calculator. Output of post sentiment filter.
+pub const FILTERED_POST_ID_SENTIMENT_QUEUE_NAME: &str = "tp2.posts.sentiment.filtered";
 /// Output of post sentiment calculator
 pub const POST_SENTIMENT_MEAN_QUEUE_NAME: &str = "tp2.posts.sentiment.best";
 /// Input of college comment filter
 pub const COMMENT_COLLEGE_QUEUE_NAME: &str = "tp2.comments.college_src";
 /// Input of college posts filter. Output of college comment filter.
 pub const POST_ID_COLLEGE_QUEUE_NAME: &str = "tp2.posts.college_id";
-/// Sink of college posts filter.
-pub const COLLEGE_MEME_SINK_QUEUE_NAME: &str = "tp2.posts.college.sink";
-/// Sink of mean calculator.
-pub const MEAN_SCORE_SINK_QUEUE_NAME: &str = "tp2.posts.mean.sink";
-/// Sink of best meme filter.
-pub const BEST_MEME_SINK_QUEUE_NAME: &str = "tp2.posts.best.sink";
 /// Results queue
 pub const RESULTS_QUEUE_NAME: &str = "tp2.results";

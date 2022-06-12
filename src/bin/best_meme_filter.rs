@@ -1,6 +1,6 @@
 use amiquip::{
-    Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish,
-    QueueDeclareOptions, Result,
+    Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish, QueueDeclareOptions,
+    Result,
 };
 use envconfig::Envconfig;
 use log::{debug, error, info, warn};
@@ -49,7 +49,7 @@ fn run_service(config: Config) -> Result<()> {
         if let ConsumerMessage::Delivery(delivery) = consumer_message {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
-                    debug!("URLs ended");
+                    consumer.ack(delivery)?;
                     break;
                 }
                 Ok(Message::PostUrl(id, url)) => {
@@ -58,19 +58,15 @@ fn run_service(config: Config) -> Result<()> {
                         meme_url = url
                     }
                 }
-                Ok(_) => {
-                    // Todo Notify invalid messages?
+                _ => {
                     error!("Invalid message arrived");
-                }
-                Err(_) => {
-                    warn!("Consumer ended unexpectedly: {:?}", delivery);
                 }
             }
             consumer.ack(delivery)?;
         }
     }
     debug!("Sending best meme url: {}", meme_url);
-    let body = bincode::serialize(&Message::PostUrl("".to_string(), meme_url)).unwrap();
+    let body = bincode::serialize(&Message::PostUrl(best_meme_id, meme_url)).unwrap();
     exchange.publish(Publish::new(&body, RESULTS_QUEUE_NAME))?;
     info!("Exit");
     connection.close()
@@ -101,5 +97,6 @@ fn get_best_meme_id(channel: &Channel) -> Result<String> {
             consumer.ack(delivery)?;
         }
     }
+    info!("Best meme sentiment: {:?}", best_meme_id_sentiment);
     Ok(best_meme_id_sentiment.0)
 }

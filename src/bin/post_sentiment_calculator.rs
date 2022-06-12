@@ -5,7 +5,7 @@ use envconfig::Envconfig;
 use log::{debug, error, info};
 use std::collections::HashMap;
 use tp2::messages::Message;
-use tp2::{Config, POST_ID_SENTIMENT_QUEUE_NAME, POST_SENTIMENT_MEAN_QUEUE_NAME};
+use tp2::{Config, FILTERED_POST_ID_SENTIMENT_QUEUE_NAME, POST_SENTIMENT_MEAN_QUEUE_NAME};
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -29,7 +29,7 @@ fn run_service(config: Config) -> Result<()> {
         auto_delete: false,
         ..QueueDeclareOptions::default()
     };
-    let queue = channel.queue_declare(POST_ID_SENTIMENT_QUEUE_NAME, options)?;
+    let queue = channel.queue_declare(FILTERED_POST_ID_SENTIMENT_QUEUE_NAME, options)?;
 
     // Score producer
     let exchange = Exchange::direct(&channel);
@@ -42,8 +42,11 @@ fn run_service(config: Config) -> Result<()> {
             match bincode::deserialize::<Message>(&delivery.body) {
                 Ok(Message::EndOfStream) => {
                     let post_sentiment = get_highest_post_sentiment(&post_sentiments_map);
-                    let body =
-                        bincode::serialize(&Message::PostIdSentiment(post_sentiment.0, post_sentiment.1)).unwrap();
+                    let body = bincode::serialize(&Message::PostIdSentiment(
+                        post_sentiment.0,
+                        post_sentiment.1,
+                    ))
+                    .unwrap();
                     exchange.publish(Publish::new(&body, POST_SENTIMENT_MEAN_QUEUE_NAME))?;
                     consumer.ack(delivery)?;
                     break;
