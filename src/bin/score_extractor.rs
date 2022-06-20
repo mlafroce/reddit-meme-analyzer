@@ -1,10 +1,10 @@
-use amiquip::{Result};
+use amiquip::Result;
 use envconfig::Envconfig;
-use log::{warn};
+use log::warn;
+use tp2::connection::BinaryExchange;
 use tp2::messages::Message;
 use tp2::service::RabbitService;
 use tp2::{Config, POST_SCORES_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME};
-use tp2::connection::BinaryExchange;
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -17,7 +17,7 @@ fn main() -> Result<()> {
 struct ScoreExtractor;
 
 impl RabbitService for ScoreExtractor {
-    fn process_message(&self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
+    fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
         match message {
             Message::FullPost(post) => {
                 let score = Message::PostScore(post.score);
@@ -29,9 +29,17 @@ impl RabbitService for ScoreExtractor {
         }
         Ok(())
     }
+
+    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
+        Ok(())
+    }
 }
 
 fn run_service(config: Config) -> Result<()> {
     let mut service = ScoreExtractor;
-    service.run(config,POST_SCORES_QUEUE_NAME, Some(POST_SCORE_MEAN_QUEUE_NAME.to_owned()))
+    service.run(
+        config,
+        POST_SCORES_QUEUE_NAME,
+        Some(POST_SCORE_MEAN_QUEUE_NAME.to_owned()),
+    )
 }

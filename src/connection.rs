@@ -1,7 +1,11 @@
-use amiquip::{Channel, Connection, Consumer, ConsumerOptions, Exchange, ExchangeDeclareOptions, ExchangeType, Publish, QueueDeclareOptions, Result};
-use log::{debug, error};
-use crate::Config;
+use std::cmp::Ordering;
 use crate::messages::Message;
+use crate::Config;
+use amiquip::{
+    Channel, Connection, Consumer, ConsumerOptions, Exchange, ExchangeDeclareOptions, ExchangeType,
+    Publish, QueueDeclareOptions, Result,
+};
+use log::{debug, error};
 
 pub struct RabbitConnection {
     connection: Connection,
@@ -9,7 +13,7 @@ pub struct RabbitConnection {
 }
 
 impl RabbitConnection {
-    pub fn new(config: Config) -> Result<Self> {
+    pub fn new(config: &Config) -> Result<Self> {
         let host_addr = format!(
             "amqp://{}:{}@{}:{}",
             config.user, config.pass, config.server_host, config.server_port
@@ -36,13 +40,13 @@ impl RabbitConnection {
         Exchange::direct(&self.channel)
     }
 
-    pub fn get_fanout_exchange(&mut self, exchange: &str) -> Result<Exchange> {
+    pub fn get_named_exchange(&self, exchange: &str, type_: ExchangeType) -> Result<Exchange> {
         let exchange_options = ExchangeDeclareOptions {
             durable: true,
             ..ExchangeDeclareOptions::default()
         };
         self.channel
-            .exchange_declare(ExchangeType::Fanout, exchange, exchange_options)
+            .exchange_declare(type_, exchange, exchange_options)
     }
 
     pub fn close(self) -> Result<()> {
@@ -80,8 +84,8 @@ impl<'a> BinaryExchange<'a> {
     }
 
     pub fn send<T>(&self, message: &T) -> Result<()>
-        where
-            T: serde::Serialize,
+    where
+        T: serde::Serialize,
     {
         let body = bincode::serialize(message).unwrap();
         self.exchange.publish(Publish::new(&body, &self.output_key))
@@ -90,18 +94,22 @@ impl<'a> BinaryExchange<'a> {
     /// Call when an end of stream arrives. If no producers are left, notify consumers about EOS
     /// Returns true if finished, false otherwise
     pub fn producer_ended(&mut self) -> Result<bool> {
-        if self.finished_producers < self.producers - 1 {
-            self.finished_producers += 1;
-            Ok(false)
-        } else if self.finished_producers == self.producers - 1 {
-            self.finished_producers += 1;
-            for _ in 0..self.consumers {
-                self.send(&self.eos_message)?;
+        match self.finished_producers.cmp(&(self.producers - 1)) {
+            Ordering::Less => {
+                self.finished_producers += 1;
+                Ok(false)
+            },
+            Ordering::Equal => {
+                self.finished_producers += 1;
+                for _ in 0..self.consumers {
+                    self.send(&self.eos_message)?;
+                }
+                Ok(true)
+            },
+            Ordering::Greater => {
+                error!("Received extra End Of stream");
+                Ok(true)
             }
-            Ok(true)
-        } else {
-            error!("Received extra End Of stream");
-            Ok(true)
         }
     }
 }

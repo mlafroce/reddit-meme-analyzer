@@ -42,9 +42,6 @@ fn run_service(config: Config) -> Result<()> {
                 Ok(Message::EndOfStream) => {
                     let mean = score_sum as f32 / count as f32;
                     info!("End of stream received, sending mean: {}", mean);
-                    //
-                    // FIXME! Use fanout exchange
-                    //
                     let body = bincode::serialize(&Message::PostScoreMean(mean)).unwrap();
                     exchange.publish(Publish::new(&body, RESULTS_QUEUE_NAME))?;
                     exchange.publish(Publish::new(&body, POST_SCORE_AVERAGE_QUEUE_NAME))?;

@@ -1,6 +1,7 @@
-use amiquip::{Connection, ExchangeDeclareOptions, ExchangeType, Publish, Result};
+use amiquip::{ExchangeType, Publish, Result};
 use envconfig::Envconfig;
 use log::{debug, info};
+use tp2::connection::RabbitConnection;
 use tp2::messages::Message;
 use tp2::post::PostIterator;
 use tp2::{Config, POSTS_SOURCE_EXCHANGE_NAME};
@@ -15,24 +16,9 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config, posts_file: String) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
-
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
-    let exchange_options = ExchangeDeclareOptions {
-        durable: true,
-        ..ExchangeDeclareOptions::default()
-    };
-    let exchange = channel.exchange_declare(
-        ExchangeType::Fanout,
-        POSTS_SOURCE_EXCHANGE_NAME,
-        exchange_options,
-    )?;
-
+    let connection = RabbitConnection::new(&config)?;
+    let exchange =
+        connection.get_named_exchange(POSTS_SOURCE_EXCHANGE_NAME, ExchangeType::Fanout)?;
     let posts = PostIterator::from_file(&posts_file);
     info!("Iterating posts");
     let published = posts

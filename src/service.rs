@@ -1,22 +1,22 @@
+use crate::connection::{BinaryExchange, RabbitConnection};
 use crate::messages::Message;
 use crate::Config;
 use amiquip::{ConsumerMessage, Result};
 use log::{error, info, warn};
-use crate::connection::{BinaryExchange, RabbitConnection};
 
 pub trait RabbitService {
-    fn process_message(&self, message: Message, bin_exchange: &BinaryExchange) -> Result<()>;
+    fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()>;
 
-    fn run(&mut self, config: Config, consumer: &str,
-           output_key: Option<String>) -> Result<()>{
-        let consumers  = str::parse::<usize>(&config.consumers).unwrap();
-        let producers  = str::parse::<usize>(&config.producers).unwrap();
-        let connection = RabbitConnection::new(config)?;
+    fn on_stream_finished(&self, bin_exchange: &BinaryExchange) -> Result<()>;
+
+    fn run(&mut self, config: Config, consumer: &str, output_key: Option<String>) -> Result<()> {
+        let consumers = str::parse::<usize>(&config.consumers).unwrap();
+        let producers = str::parse::<usize>(&config.producers).unwrap();
+        let connection = RabbitConnection::new(&config)?;
         {
             let exchange = connection.get_direct_exchange();
             let consumer = connection.get_consumer(consumer)?;
-            let mut bin_exchange =
-                BinaryExchange::new(exchange, output_key, producers, consumers);
+            let mut bin_exchange = BinaryExchange::new(exchange, output_key, producers, consumers);
 
             for consumer_message in consumer.receiver().iter() {
                 if let ConsumerMessage::Delivery(delivery) = consumer_message {
@@ -24,10 +24,12 @@ pub trait RabbitService {
                     match message {
                         Ok(Message::EndOfStream) => {
                             let stream_finished = bin_exchange.producer_ended()?;
-                            consumer.ack(delivery)?;
                             if stream_finished {
+                                self.on_stream_finished(&bin_exchange)?;
+                                consumer.ack(delivery)?;
                                 break;
                             } else {
+                                consumer.ack(delivery)?;
                                 continue;
                             }
                         }
