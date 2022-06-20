@@ -1,9 +1,9 @@
-use amiquip::{
-    Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish, QueueDeclareOptions, Result,
-};
+use amiquip::Result;
 use envconfig::Envconfig;
-use log::{debug, error, info};
+use log::{warn};
+use tp2::connection::BinaryExchange;
 use tp2::messages::Message;
+use tp2::service::RabbitService;
 use tp2::{Config, COMMENT_COLLEGE_QUEUE_NAME, POST_ID_COLLEGE_QUEUE_NAME};
 
 fn main() -> Result<()> {
@@ -15,54 +15,35 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
+    let mut service = CommentCollegeFilter;
+    service.run(
+        config,
+        COMMENT_COLLEGE_QUEUE_NAME,
+        Some(POST_ID_COLLEGE_QUEUE_NAME.to_string()),
+    )
+}
 
-    // Post consumer
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-    let queue = channel.queue_declare(COMMENT_COLLEGE_QUEUE_NAME, options)?;
+struct CommentCollegeFilter;
 
-    // Score producer
-    let exchange = Exchange::direct(&channel);
-
-    let consumer = queue.consume(ConsumerOptions::default())?;
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            match bincode::deserialize::<Message>(&delivery.body) {
-                Ok(Message::EndOfStream) => {
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        POST_ID_COLLEGE_QUEUE_NAME,
-                    ))?;
-                    consumer.ack(delivery)?;
-                    break;
-                }
-                Ok(Message::FullComment(comment)) => {
-                    if comment.is_college_related() {
-                        if let Some(post_id) = comment.parse_post_id() {
-                            let msg = Message::PostId(post_id);
-                            exchange.publish(Publish::new(
-                                &bincode::serialize(&msg).unwrap(),
-                                POST_ID_COLLEGE_QUEUE_NAME,
-                            ))?;
-                        }
+impl RabbitService for CommentCollegeFilter {
+    fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::FullComment(comment) => {
+                if comment.is_college_related() {
+                    if let Some(post_id) = comment.parse_post_id() {
+                        let msg = Message::PostId(post_id);
+                        bin_exchange.send(&msg)?;
                     }
                 }
-                _ => {
-                    error!("Invalid message arrived");
-                }
-            };
-            consumer.ack(delivery)?;
+            }
+            _ => {
+                warn!("Invalid message arrived");
+            }
         }
+        Ok(())
     }
-    info!("Exit");
-    connection.close()
+
+    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
+        Ok(())
+    }
 }

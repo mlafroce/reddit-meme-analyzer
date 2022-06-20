@@ -1,10 +1,10 @@
-use amiquip::{
-    Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish, QueueDeclareOptions, Result,
-};
+use amiquip::Result;
 use envconfig::Envconfig;
-use log::{debug, error, info};
+use log::{info, warn};
 use tp2::messages::Message;
 use tp2::{Config, POST_SCORE_AVERAGE_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME, RESULTS_QUEUE_NAME};
+use tp2::connection::BinaryExchange;
+use tp2::service::RabbitService;
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -15,50 +15,39 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
+    let mut service = MeanCalculator::default();
+    service.run(
+        config,
+        POST_SCORE_MEAN_QUEUE_NAME,
+        None,
+    )
+}
 
-    // Post consumer
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-    let queue = channel.queue_declare(POST_SCORE_MEAN_QUEUE_NAME, options)?;
+#[derive(Default)]
+struct MeanCalculator {
+    score_count: u32,
+    score_sum: u32,
+}
 
-    // Score producer
-    let exchange = Exchange::direct(&channel);
-
-    let consumer = queue.consume(ConsumerOptions::default())?;
-    let mut score_sum = 0;
-    let mut count = 0;
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            match bincode::deserialize::<Message>(&delivery.body) {
-                Ok(Message::EndOfStream) => {
-                    let mean = score_sum as f32 / count as f32;
-                    info!("End of stream received, sending mean: {}", mean);
-                    let body = bincode::serialize(&Message::PostScoreMean(mean)).unwrap();
-                    exchange.publish(Publish::new(&body, RESULTS_QUEUE_NAME))?;
-                    exchange.publish(Publish::new(&body, POST_SCORE_AVERAGE_QUEUE_NAME))?;
-                    consumer.ack(delivery)?;
-                    break;
-                }
-                Ok(Message::PostScore(score)) => {
-                    count += 1;
-                    score_sum += score;
-                }
-                _ => {
-                    error!("Invalid message arrived");
-                }
-            };
-            consumer.ack(delivery)?;
+impl RabbitService for MeanCalculator {
+    fn process_message(&mut self, message: Message, _: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::PostScore(score) => {
+                self.score_count += 1;
+                self.score_sum += score;
+            }
+            _ => {
+                warn!("Invalid message arrived");
+            }
         }
+        Ok(())
     }
-    info!("Exit");
-    connection.close()
+
+    fn on_stream_finished(&self, exchange: &BinaryExchange) -> Result<()> {
+        let mean = self.score_sum as f32 / self.score_count as f32;
+        info!("End of stream received, sending mean: {}", mean);
+        let msg = Message::PostScoreMean(mean);
+        exchange.send_with_key(&msg, RESULTS_QUEUE_NAME)?;
+        exchange.send_with_key(&msg, POST_SCORE_AVERAGE_QUEUE_NAME)
+    }
 }

@@ -16,6 +16,16 @@ fn main() -> Result<()> {
     run_service(env_config)
 }
 
+fn run_service(config: Config) -> Result<()> {
+    let best_meme_id = get_best_meme_id(&config)?;
+    let mut service = BestMemeFilter::new(best_meme_id);
+    service.run(
+        config,
+        POST_EXTRACTED_URL_QUEUE_NAME,
+        Some(RESULTS_QUEUE_NAME.to_string()),
+    )
+}
+
 struct BestMemeFilter {
     best_meme_id: String,
     meme_url: String,
@@ -51,16 +61,6 @@ impl RabbitService for BestMemeFilter {
         let message = Message::PostUrl(self.best_meme_id.clone(), self.meme_url.clone());
         exchange.send(&message)
     }
-}
-
-fn run_service(config: Config) -> Result<()> {
-    let best_meme_id = get_best_meme_id(&config)?;
-    let mut service = BestMemeFilter::new(best_meme_id);
-    service.run(
-        config,
-        POST_EXTRACTED_URL_QUEUE_NAME,
-        Some(RESULTS_QUEUE_NAME.to_string()),
-    )
 }
 
 // Should I use a heap of best memes ids in case the best one is missing?

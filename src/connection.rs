@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use crate::messages::Message;
 use crate::Config;
 use amiquip::{
@@ -6,6 +5,7 @@ use amiquip::{
     Publish, QueueDeclareOptions, Result,
 };
 use log::{debug, error};
+use std::cmp::Ordering;
 
 pub struct RabbitConnection {
     connection: Connection,
@@ -87,8 +87,15 @@ impl<'a> BinaryExchange<'a> {
     where
         T: serde::Serialize,
     {
+        self.send_with_key(message, &self.output_key)
+    }
+
+    pub fn send_with_key<T>(&self, message: &T, key: &str) -> Result<()>
+        where
+            T: serde::Serialize,
+    {
         let body = bincode::serialize(message).unwrap();
-        self.exchange.publish(Publish::new(&body, &self.output_key))
+        self.exchange.publish(Publish::new(&body, key))
     }
 
     /// Call when an end of stream arrives. If no producers are left, notify consumers about EOS
@@ -98,14 +105,14 @@ impl<'a> BinaryExchange<'a> {
             Ordering::Less => {
                 self.finished_producers += 1;
                 Ok(false)
-            },
+            }
             Ordering::Equal => {
                 self.finished_producers += 1;
                 for _ in 0..self.consumers {
                     self.send(&self.eos_message)?;
                 }
                 Ok(true)
-            },
+            }
             Ordering::Greater => {
                 error!("Received extra End Of stream");
                 Ok(true)

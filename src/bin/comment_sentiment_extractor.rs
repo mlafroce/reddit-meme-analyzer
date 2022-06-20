@@ -1,10 +1,10 @@
-use amiquip::{
-    Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish, QueueDeclareOptions, Result,
-};
+use amiquip::Result;
 use envconfig::Envconfig;
-use log::{debug, error, info};
+use log::warn;
 use tp2::messages::Message;
 use tp2::{Config, COMMENT_SENTIMENT_QUEUE_NAME, POST_ID_SENTIMENT_QUEUE_NAME};
+use tp2::connection::BinaryExchange;
+use tp2::service::RabbitService;
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -15,54 +15,35 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
+    let mut service = CommentSentimentExtractor;
+    service.run(
+        config,
+        COMMENT_SENTIMENT_QUEUE_NAME,
+        Some(POST_ID_SENTIMENT_QUEUE_NAME.to_string()),
+    )
+}
 
-    // Post consumer
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-    let queue = channel.queue_declare(COMMENT_SENTIMENT_QUEUE_NAME, options)?;
+struct CommentSentimentExtractor;
 
-    // Score producer
-    let exchange = Exchange::direct(&channel);
-
-    let consumer = queue.consume(ConsumerOptions::default())?;
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            match bincode::deserialize::<Message>(&delivery.body) {
-                Ok(Message::EndOfStream) => {
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        POST_ID_SENTIMENT_QUEUE_NAME,
-                    ))?;
-                    consumer.ack(delivery)?;
-                    break;
-                }
-                Ok(Message::FullComment(comment)) => {
-                    if let Some(post_id) = comment.parse_post_id() {
-                        if let Ok(sentiment) = str::parse::<f32>(&comment.sentiment) {
-                            let msg = Message::PostIdSentiment(post_id, sentiment);
-                            exchange.publish(Publish::new(
-                                &bincode::serialize(&msg).unwrap(),
-                                POST_ID_SENTIMENT_QUEUE_NAME,
-                            ))?;
-                        }
+impl RabbitService for CommentSentimentExtractor {
+    fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::FullComment(comment) => {
+                if let Some(post_id) = comment.parse_post_id() {
+                    if let Ok(sentiment) = str::parse::<f32>(&comment.sentiment) {
+                        let msg = Message::PostIdSentiment(post_id, sentiment);
+                        bin_exchange.send(&msg)?;
                     }
                 }
-                _ => {
-                    error!("Invalid message arrived");
-                }
-            };
-            consumer.ack(delivery)?;
+            }
+            _ => {
+                warn!("Invalid message arrived");
+            }
         }
+        Ok(())
     }
-    info!("Exit");
-    connection.close()
+
+    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
+        Ok(())
+    }
 }
