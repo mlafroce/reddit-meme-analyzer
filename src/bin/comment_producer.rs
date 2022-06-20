@@ -3,8 +3,8 @@ use log::{debug, info};
 use tp2::comment::CommentIterator;
 use tp2::connection::RabbitConnection;
 use tp2::messages::Message;
-use tp2::{Config, COMMENTS_SOURCE_EXCHANGE_NAME};
 use tp2::service::init;
+use tp2::{Config, COMMENTS_SOURCE_EXCHANGE_NAME};
 
 fn main() -> Result<()> {
     let env_config = init();

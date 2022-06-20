@@ -1,10 +1,9 @@
-use amiquip::{
-    Channel, Connection, ConsumerMessage, ConsumerOptions, Error, Exchange, Publish,
-    QueueDeclareOptions, Result,
-};
+use amiquip::{ConsumerMessage, Error, Result};
 use envconfig::Envconfig;
-use log::{debug, error, info};
+use log::{error, info, warn};
+use tp2::connection::{BinaryExchange, RabbitConnection};
 use tp2::messages::Message;
+use tp2::service::RabbitService;
 use tp2::{
     Config, POST_COLLEGE_QUEUE_NAME, POST_SCORE_AVERAGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME,
 };
@@ -18,82 +17,58 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
+    info!("Getting score average");
+    let score_average = get_score_average(&config)?;
+    info!("Filtering above average");
+    let mut service = PostAverageFilter { score_average };
+    service.run(
+        config,
+        POST_COLLEGE_QUEUE_NAME,
+        Some(POST_URL_AVERAGE_QUEUE_NAME.to_string()),
+    )
+}
 
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
+struct PostAverageFilter {
+    score_average: f32,
+}
 
-    let score_average = get_score_average(&channel)?;
-
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-
-    let queue = channel.queue_declare(POST_COLLEGE_QUEUE_NAME, options)?;
-
-    let exchange = Exchange::direct(&channel);
-
-    // Query results
-    let consumer = queue.consume(ConsumerOptions::default())?;
-
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            let message = bincode::deserialize::<Message>(&delivery.body);
-            match message {
-                Ok(Message::FullPost(post)) => {
-                    if post.score as f32 > score_average && post.url.starts_with("https") {
-                        let msg = Message::PostUrl(post.id, post.url);
-                        let body = bincode::serialize(&msg).unwrap();
-                        exchange.publish(Publish::new(&body, POST_URL_AVERAGE_QUEUE_NAME))?;
-                    }
-                }
-                Ok(Message::EndOfStream) => {
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        POST_URL_AVERAGE_QUEUE_NAME,
-                    ))?;
-                    consumer.ack(delivery)?;
-                    break;
-                }
-                _ => {
-                    error!("Invalid message arrived");
+impl RabbitService for PostAverageFilter {
+    fn process_message(&mut self, message: Message, exchange: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::FullPost(post) => {
+                if post.score as f32 > self.score_average && post.url.starts_with("https") {
+                    let msg = Message::PostUrl(post.id, post.url);
+                    exchange.send(&msg)?;
                 }
             }
-            consumer.ack(delivery)?;
+            _ => {
+                warn!("Invalid message arrived");
+            }
         }
+        Ok(())
     }
-    info!("Exit");
-    connection.close()
 }
 
 // Should I use a heap of best memes ids in case the best one is missing?
-fn get_score_average(channel: &Channel) -> Result<f32> {
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-    let queue = channel.queue_declare(POST_SCORE_AVERAGE_QUEUE_NAME, options)?;
-    // Query results
-    let consumer = queue.consume(ConsumerOptions::default())?;
-
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            match bincode::deserialize::<Message>(&delivery.body) {
-                Ok(Message::PostScoreMean(mean)) => {
-                    consumer.ack(delivery)?;
-                    return Ok(mean);
+fn get_score_average(config: &Config) -> Result<f32> {
+    let connection = RabbitConnection::new(config)?;
+    {
+        let consumer = connection.get_consumer(POST_SCORE_AVERAGE_QUEUE_NAME)?;
+        for consumer_message in consumer.receiver().iter() {
+            if let ConsumerMessage::Delivery(delivery) = consumer_message {
+                match bincode::deserialize::<Message>(&delivery.body) {
+                    Ok(Message::PostScoreMean(mean)) => {
+                        consumer.ack(delivery)?;
+                        return Ok(mean);
+                    }
+                    _ => {
+                        error!("Invalid message arrived");
+                    }
                 }
-                _ => {
-                    error!("Invalid message arrived");
-                }
+                consumer.ack(delivery)?;
             }
-            consumer.ack(delivery)?;
         }
     }
+    connection.close()?;
     Err(Error::ClientException)
 }

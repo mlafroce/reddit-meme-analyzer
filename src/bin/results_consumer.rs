@@ -3,8 +3,8 @@ use log::{debug, error, info};
 use std::io::Write;
 use std::sync::atomic::Ordering;
 use tp2::messages::Message;
-use tp2::{Config, RECV_TIMEOUT, RESULTS_QUEUE_NAME};
 use tp2::service::{init, TERM_FLAG};
+use tp2::{Config, RECV_TIMEOUT, RESULTS_QUEUE_NAME};
 
 const N_RESULTS: usize = 1;
 
@@ -78,14 +78,15 @@ fn run_service(config: Config, output_path: String) -> Result<()> {
                 if data_received.0 && data_received.1 && data_received.2 {
                     break;
                 }
-            },
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {},
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
             _ => {
                 error!("Some error on consumer");
             }
         }
     }
     if let Ok(mut file) = std::fs::File::create(output_path) {
+        results.college_posts.sort();
         write!(file, "Results: {:?}", results).unwrap();
     } else {
         error!("Couldn't write results!");

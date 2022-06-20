@@ -1,5 +1,5 @@
 use amiquip::Result;
-use log::{warn};
+use log::warn;
 use tp2::connection::BinaryExchange;
 use tp2::messages::Message;
 use tp2::service::{init, RabbitService};
@@ -36,10 +36,6 @@ impl RabbitService for CommentCollegeFilter {
                 warn!("Invalid message arrived");
             }
         }
-        Ok(())
-    }
-
-    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
         Ok(())
     }
 }

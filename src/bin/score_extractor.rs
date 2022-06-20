@@ -25,10 +25,6 @@ impl RabbitService for ScoreExtractor {
         }
         Ok(())
     }
-
-    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
-        Ok(())
-    }
 }
 
 fn run_service(config: Config) -> Result<()> {

@@ -1,12 +1,12 @@
-use envconfig::Envconfig;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::connection::{BinaryExchange, RabbitConnection};
 use crate::messages::Message;
 use crate::{Config, RECV_TIMEOUT};
 use amiquip::{ConsumerMessage, Result};
+use envconfig::Envconfig;
 use lazy_static::lazy_static;
 use log::{error, info};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 // global
 lazy_static! {
@@ -26,7 +26,9 @@ pub fn init() -> Config {
 pub trait RabbitService {
     fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()>;
 
-    fn on_stream_finished(&self, bin_exchange: &BinaryExchange) -> Result<()>;
+    fn on_stream_finished(&self, _: &BinaryExchange) -> Result<()> {
+        Ok(())
+    }
 
     fn run(&mut self, config: Config, consumer: &str, output_key: Option<String>) -> Result<()> {
         let consumers = str::parse::<usize>(&config.consumers).unwrap();
@@ -63,7 +65,7 @@ pub trait RabbitService {
                         };
                         consumer.ack(delivery)?;
                     }
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {},
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
                     _ => {
                         error!("Some error on consumer");
                     }

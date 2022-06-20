@@ -1,6 +1,6 @@
 use amiquip::{ExchangeType, Publish, Result};
 use envconfig::Envconfig;
-use log::{debug, info};
+use log::info;
 use tp2::connection::RabbitConnection;
 use tp2::messages::Message;
 use tp2::post::PostIterator;
@@ -23,10 +23,7 @@ fn run_service(config: Config, posts_file: String) -> Result<()> {
     info!("Iterating posts");
     let published = posts
         .map(Message::FullPost)
-        .flat_map(|message| {
-            debug!("Publishing {:?}", message);
-            bincode::serialize(&message)
-        })
+        .flat_map(|message| bincode::serialize(&message))
         .flat_map(|data| exchange.publish(Publish::new(&data, "")))
         .count();
 

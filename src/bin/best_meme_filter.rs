@@ -13,7 +13,9 @@ fn main() -> Result<()> {
 }
 
 fn run_service(config: Config) -> Result<()> {
+    info!("Getting best meme id");
     let best_meme_id = get_best_meme_id(&config)?;
+    info!("Getting best meme");
     let mut service = BestMemeFilter::new(best_meme_id);
     service.run(
         config,
@@ -62,22 +64,24 @@ impl RabbitService for BestMemeFilter {
 // Should I use a heap of best memes ids in case the best one is missing?
 fn get_best_meme_id(config: &Config) -> Result<String> {
     let connection = RabbitConnection::new(config)?;
-    let consumer = connection.get_consumer(POST_SENTIMENT_MEAN_QUEUE_NAME)?;
-
     let mut best_meme_id_sentiment = ("".to_string(), f32::MIN);
-    if let Some(ConsumerMessage::Delivery(delivery)) = consumer.receiver().iter().next() {
-        match bincode::deserialize::<Message>(&delivery.body) {
-            Ok(Message::PostIdSentiment(id, sentiment)) => {
-                if sentiment > best_meme_id_sentiment.1 {
-                    best_meme_id_sentiment = (id, sentiment);
+    {
+        let consumer = connection.get_consumer(POST_SENTIMENT_MEAN_QUEUE_NAME)?;
+        if let Some(ConsumerMessage::Delivery(delivery)) = consumer.receiver().iter().next() {
+            match bincode::deserialize::<Message>(&delivery.body) {
+                Ok(Message::PostIdSentiment(id, sentiment)) => {
+                    if sentiment > best_meme_id_sentiment.1 {
+                        best_meme_id_sentiment = (id, sentiment);
+                    }
+                }
+                _ => {
+                    error!("Invalid message arrived");
                 }
             }
-            _ => {
-                error!("Invalid message arrived");
-            }
+            consumer.ack(delivery)?;
         }
-        consumer.ack(delivery)?;
     }
     info!("Best meme sentiment: {:?}", best_meme_id_sentiment);
+    connection.close()?;
     Ok(best_meme_id_sentiment.0)
 }

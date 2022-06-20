@@ -91,8 +91,8 @@ impl<'a> BinaryExchange<'a> {
     }
 
     pub fn send_with_key<T>(&self, message: &T, key: &str) -> Result<()>
-        where
-            T: serde::Serialize,
+    where
+        T: serde::Serialize,
     {
         let body = bincode::serialize(message).unwrap();
         self.exchange.publish(Publish::new(&body, key))
