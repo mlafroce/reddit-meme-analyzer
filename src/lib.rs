@@ -1,4 +1,5 @@
 use envconfig::Envconfig;
+use std::time::Duration;
 
 pub mod comment;
 pub mod connection;
@@ -30,6 +31,9 @@ pub struct Config {
     #[envconfig(from = "CONSUMERS", default = "1")]
     pub consumers: String,
 }
+
+/// Timeout for receive operations
+pub const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Exchange with full posts
 pub const POSTS_SOURCE_EXCHANGE_NAME: &str = "tp2.posts";

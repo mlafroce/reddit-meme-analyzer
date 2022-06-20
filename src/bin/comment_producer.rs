@@ -1,16 +1,13 @@
 use amiquip::{ExchangeType, Publish, Result};
-use envconfig::Envconfig;
 use log::{debug, info};
 use tp2::comment::CommentIterator;
 use tp2::connection::RabbitConnection;
 use tp2::messages::Message;
 use tp2::{Config, COMMENTS_SOURCE_EXCHANGE_NAME};
+use tp2::service::init;
 
 fn main() -> Result<()> {
-    let env_config = Config::init_from_env().unwrap();
-    println!("Setting logger level: {}", env_config.logging_level);
-    std::env::set_var("RUST_LOG", env_config.logging_level.clone());
-    env_logger::init();
+    let env_config = init();
     let comments_file = envconfig::load_var_with_default(
         "COMMENTS_FILE",
         None,

@@ -1,16 +1,12 @@
 use amiquip::Result;
-use envconfig::Envconfig;
 use log::warn;
 use tp2::connection::BinaryExchange;
 use tp2::messages::Message;
-use tp2::service::RabbitService;
+use tp2::service::{init, RabbitService};
 use tp2::{Config, POST_SCORES_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME};
 
 fn main() -> Result<()> {
-    let env_config = Config::init_from_env().unwrap();
-    println!("Setting logger level: {}", env_config.logging_level);
-    std::env::set_var("RUST_LOG", env_config.logging_level.clone());
-    env_logger::init();
+    let env_config = init();
     run_service(env_config)
 }
 
