@@ -1,8 +1,10 @@
 use envconfig::Envconfig;
 
 pub mod comment;
+pub mod connection;
 pub mod messages;
 pub mod post;
+pub mod service;
 
 #[derive(Envconfig)]
 pub struct Config {
@@ -21,6 +23,12 @@ pub struct Config {
     /// RabbitMQ password
     #[envconfig(from = "RABBITMQ_PASS", default = "guest")]
     pub pass: String,
+    /// Number of producers sending data
+    #[envconfig(from = "PRODUCERS", default = "1")]
+    pub producers: String,
+    /// Number of consumers reading data (in fanouts, use max number of each endpoint)
+    #[envconfig(from = "CONSUMERS", default = "1")]
+    pub consumers: String,
 }
 
 /// Exchange with full posts

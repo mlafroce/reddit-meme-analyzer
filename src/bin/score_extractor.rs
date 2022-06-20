@@ -1,10 +1,10 @@
-use amiquip::{
-    Connection, ConsumerMessage, ConsumerOptions, Exchange, Publish, QueueDeclareOptions, Result,
-};
+use amiquip::{Result};
 use envconfig::Envconfig;
-use log::{debug, error, info};
+use log::{warn};
 use tp2::messages::Message;
+use tp2::service::RabbitService;
 use tp2::{Config, POST_SCORES_QUEUE_NAME, POST_SCORE_MEAN_QUEUE_NAME};
+use tp2::connection::BinaryExchange;
 
 fn main() -> Result<()> {
     let env_config = Config::init_from_env().unwrap();
@@ -14,51 +14,24 @@ fn main() -> Result<()> {
     run_service(env_config)
 }
 
-fn run_service(config: Config) -> Result<()> {
-    let host_addr = format!(
-        "amqp://{}:{}@{}:{}",
-        config.user, config.pass, config.server_host, config.server_port
-    );
-    debug!("Connecting to: {}", host_addr);
-    let mut connection = Connection::insecure_open(&host_addr)?;
-    let channel = connection.open_channel(None)?;
+struct ScoreExtractor;
 
-    // Post consumer
-    let options = QueueDeclareOptions {
-        auto_delete: false,
-        ..QueueDeclareOptions::default()
-    };
-    let queue = channel.queue_declare(POST_SCORES_QUEUE_NAME, options)?;
-
-    // Score producer
-    let exchange = Exchange::direct(&channel);
-
-    let consumer = queue.consume(ConsumerOptions::default())?;
-    for consumer_message in consumer.receiver().iter() {
-        if let ConsumerMessage::Delivery(delivery) = consumer_message {
-            match bincode::deserialize::<Message>(&delivery.body) {
-                Ok(Message::EndOfStream) => {
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&Message::EndOfStream).unwrap(),
-                        POST_SCORE_MEAN_QUEUE_NAME,
-                    ))?;
-                    consumer.ack(delivery)?;
-                    break;
-                }
-                Ok(Message::FullPost(post)) => {
-                    let score = Message::PostScore(post.score);
-                    exchange.publish(Publish::new(
-                        &bincode::serialize(&score).unwrap(),
-                        POST_SCORE_MEAN_QUEUE_NAME,
-                    ))?;
-                }
-                _ => {
-                    error!("Invalid message arrived");
-                }
-            };
-            consumer.ack(delivery)?;
+impl RabbitService for ScoreExtractor {
+    fn process_message(&self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::FullPost(post) => {
+                let score = Message::PostScore(post.score);
+                bin_exchange.send(&score)?;
+            }
+            _ => {
+                warn!("Invalid message arrived");
+            }
         }
+        Ok(())
     }
-    info!("Exit");
-    connection.close()
+}
+
+fn run_service(config: Config) -> Result<()> {
+    let mut service = ScoreExtractor;
+    service.run(config,POST_SCORES_QUEUE_NAME, Some(POST_SCORE_MEAN_QUEUE_NAME.to_owned()))
 }

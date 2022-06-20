@@ -3,7 +3,7 @@ use amiquip::{
     Result,
 };
 use envconfig::Envconfig;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tp2::messages::Message;
 use tp2::{
     Config, POST_EXTRACTED_URL_QUEUE_NAME, POST_SENTIMENT_MEAN_QUEUE_NAME, RESULTS_QUEUE_NAME,
