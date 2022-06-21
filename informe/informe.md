@@ -1,4 +1,4 @@
-# Reddit meme analyzer
+# Reddit meme analyzer 
 
 ## Introducción
 
@@ -7,17 +7,29 @@
 
 ## Descripción de los servicios
 
-![Diagrama de robustez](robustez.pdf){width=80%}
+Existen 3 flujos de datos: cálculo de mediana, posts de tipo "college" y mejor meme (con mejor sentiment promedio).
 
-En este diagrama podemos ver todos los servicios que componen los 3 flujos de datos.
+### Cálculo de mediana
 
-El cliente inicia un proceso **Data loader**, que se conecta mediante TCP a los servicios **Post producer** y **Comment producer**. Estos servicios recibe los datos en forma de csv y envían los objetos completos al servidor RabbitMQ.
+![Diagrama de robustez](robustez-mean.pdf){width=80%}
 
 En el cálculo del score medio total, el proceso **Score extractor** los posts y encola unicamente el score correspondiente. El proceso **Total mean calculator** desencola estos scores y calcula la mediana.
 
-En la extraccion de posts relacionados con *college*, tenemos por un lado que **College comments filter** nos filtra los comentarios que contienen la palabra *College*, y los encola para que el filtro **College posts filter** los desencole. Cuando se termina de filtrar los *post_id* de todos los comentarios empiezo a consumir *Posts con score arriba de la mediana*. Estos son encolados por **Posts above average filter**, que funciona primero recibiendo la mediana de **Total mean calculator** y luego filtrando los posts del *post producer*.
+### Posts de tipo college
 
-El último flujo es el de "Best meme". Para este, primero extraemos el sentiment de los comentarios con **Comment sentiment extractor**, y luego calculamos la media por post con **Post sentiment calculator**. Finalmente enviamos el Id del post con sentiment más alto. Este id lo usamos para filtrar los memes provenientes de **Meme Url extractor**.
+![Diagrama de robustez](robustez-college-posts.pdf){width=80%}
+
+En la extraccion de posts relacionados con *college*, tenemos por un lado que **College comments filter** nos filtra los comentarios que contienen palabras relacionadas con la temática *College*, y los encola para que el filtro **College posts filter** los desencole. Cuando se termina de filtrar los *post_id* de todos los comentarios empiezo a consumir *Posts con score arriba de la mediana*. Estos son encolados por **Posts above average filter**, que funciona primero recibiendo la mediana de **Total mean calculator** y luego filtrando los posts del *post producer*.
+
+### Posts de tipo college
+
+![Diagrama de robustez](robustez-best-meme.pdf){width=80%}
+
+El último flujo es el de "Best meme". Para este, primero extraemos el sentiment de los comentarios con **Comment sentiment extractor** y enviamos al **Post sentiment filter**. Este filtro se encarga de filtrar los sentimientos de comentarios que pertenezcan a un post **existente**.
+
+El **Post sentiment filter** debe primero alimentarse de los ids obtenidos del UrlExtractor, servicio que también se usa para extraer Urls de los memes que serán utilizados al final de la cadena. Una vez que se obtienen todos los ids, se pueden filtrar los comentarios inválidos.
+
+Con la salida del *post sentiment filter* calculamos el sentiment promedio por post con **Post sentiment calculator**. Finalmente enviamos el Id del post con sentiment más alto. Este id lo usamos para filtrar los memes provenientes de **Url extractor**.
 
 
 Los 3 flujos encolan el resultado en una cola de resultados para que Result consumer los baje a disco.
