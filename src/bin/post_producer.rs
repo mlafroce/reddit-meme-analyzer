@@ -27,10 +27,13 @@ fn run_service(config: Config, posts_file: String) -> Result<()> {
         .flat_map(|data| exchange.publish(Publish::new(&data, "")))
         .count();
 
-    info!("Published {} comments", published);
+    info!("Published {} posts", published);
 
-    let data = bincode::serialize(&Message::EndOfStream).unwrap();
-    exchange.publish(Publish::new(&data, ""))?;
+    let consumers = str::parse::<usize>(&config.consumers).unwrap();
+    for _ in 0..consumers {
+        let data = bincode::serialize(&Message::EndOfStream).unwrap();
+        exchange.publish(Publish::new(&data, ""))?;
+    }
     info!("Exit");
     connection.close()
 }

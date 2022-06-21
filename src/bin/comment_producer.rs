@@ -34,8 +34,11 @@ fn run_service(config: Config, comments_file: String) -> Result<()> {
 
     info!("Published {} comments", published);
 
-    let data = bincode::serialize(&Message::EndOfStream).unwrap();
-    exchange.publish(Publish::new(&data, ""))?;
+    let consumers = str::parse::<usize>(&config.consumers).unwrap();
+    for _ in 0..consumers {
+        let data = bincode::serialize(&Message::EndOfStream).unwrap();
+        exchange.publish(Publish::new(&data, ""))?;
+    }
     info!("Exit");
     connection.close()
 }
