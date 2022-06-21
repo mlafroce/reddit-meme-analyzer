@@ -20,7 +20,7 @@ fn run_service(config: Config) -> Result<()> {
     service.run(
         config,
         POST_EXTRACTED_URL_QUEUE_NAME,
-        Some(RESULTS_QUEUE_NAME.to_string()),
+        None,
     )
 }
 
@@ -57,7 +57,7 @@ impl RabbitService for BestMemeFilter {
     fn on_stream_finished(&self, exchange: &BinaryExchange) -> Result<()> {
         debug!("Sending best meme url: {}", self.meme_url);
         let message = Message::PostUrl(self.best_meme_id.clone(), self.meme_url.clone());
-        exchange.send(&message)
+        exchange.send_with_key(&message, RESULTS_QUEUE_NAME)
     }
 }
 
