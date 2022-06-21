@@ -18,7 +18,7 @@ impl RabbitService for UrlExtractor {
     fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
         match message {
             Message::FullPost(post) => {
-                if post.url.starts_with("https") {
+                if post.url.starts_with("http") {
                     let score = Message::PostUrl(post.id.clone(), post.url);
                     bin_exchange.send_with_key(&score, POST_EXTRACTED_URL_QUEUE_NAME)?;
                     let id = Message::PostId(post.id);
