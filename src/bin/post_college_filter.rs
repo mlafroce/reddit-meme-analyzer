@@ -1,7 +1,7 @@
-use amiquip::{ConsumerMessage, Result};
-use log::{error, info, warn};
+use amiquip::{Result};
+use log::{info, warn};
 use std::collections::HashSet;
-use tp2::connection::{BinaryExchange, RabbitConnection};
+use tp2::connection::{BinaryExchange};
 use tp2::messages::Message;
 use tp2::service::{init, RabbitService};
 use tp2::{Config, POST_ID_COLLEGE_QUEUE_NAME, POST_URL_AVERAGE_QUEUE_NAME, RESULTS_QUEUE_NAME};
@@ -44,29 +44,32 @@ impl RabbitService for PostCollegeFilter {
     }
 }
 
-fn get_college_posts_ids(config: &Config) -> Result<HashSet<String>> {
-    let connection = RabbitConnection::new(config)?;
-    let mut ids = HashSet::new();
-    {
-        let consumer = connection.get_consumer(POST_ID_COLLEGE_QUEUE_NAME)?;
-        for consumer_message in consumer.receiver().iter() {
-            if let ConsumerMessage::Delivery(delivery) = consumer_message {
-                match bincode::deserialize::<Message>(&delivery.body) {
-                    Ok(Message::EndOfStream) => {
-                        consumer.ack(delivery)?;
-                        break;
-                    }
-                    Ok(Message::PostId(id)) => {
-                        ids.insert(id);
-                    }
-                    _ => {
-                        error!("Invalid message arrived");
-                    }
-                };
-                consumer.ack(delivery)?;
+#[derive(Default)]
+struct CollegePostIdConsumer {
+    ids: HashSet<String>,
+}
+
+impl RabbitService for CollegePostIdConsumer {
+    fn process_message(&mut self, message: Message, _: &BinaryExchange) -> Result<()> {
+        match message {
+            Message::PostId(id) => {
+                self.ids.insert(id);
+            }
+            _ => {
+                warn!("Invalid message arrived");
             }
         }
+        Ok(())
     }
-    connection.close()?;
-    Ok(ids)
+}
+
+fn get_college_posts_ids(config: &Config) -> Result<HashSet<String>> {
+    let config = config.clone();
+    let mut service = CollegePostIdConsumer::default();
+    service.run(
+        config,
+        POST_ID_COLLEGE_QUEUE_NAME,
+        None,
+    )?;
+    Ok(service.ids)
 }

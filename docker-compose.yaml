@@ -194,4 +194,4 @@ services:
     command: url_extractor
     environment:
       - RABBITMQ_HOST=rabbitmq
-
+      - CONSUMERS=2

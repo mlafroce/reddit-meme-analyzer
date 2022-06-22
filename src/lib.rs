@@ -7,7 +7,7 @@ pub mod messages;
 pub mod post;
 pub mod service;
 
-#[derive(Envconfig)]
+#[derive(Clone, Envconfig)]
 pub struct Config {
     /// logger level: valid values: "DEBUG", "INFO", "WARN", "ERROR"
     #[envconfig(from = "LOGGING_LEVEL", default = "INFO")]

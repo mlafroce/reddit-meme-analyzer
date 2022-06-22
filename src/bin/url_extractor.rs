@@ -12,16 +12,18 @@ fn main() -> Result<()> {
     run_service(env_config)
 }
 
-struct UrlExtractor;
+struct UrlExtractor {
+    consumers: usize
+}
 
 impl RabbitService for UrlExtractor {
     fn process_message(&mut self, message: Message, bin_exchange: &BinaryExchange) -> Result<()> {
         match message {
             Message::FullPost(post) => {
                 if post.url.starts_with("http") {
-                    let score = Message::PostUrl(post.id.clone(), post.url);
+                    let score = Message::PostUrl(post.id.clone(), post.url.clone());
                     bin_exchange.send_with_key(&score, POST_EXTRACTED_URL_QUEUE_NAME)?;
-                    let id = Message::PostId(post.id);
+                    let id = Message::PostId(post.id.clone());
                     bin_exchange.send_with_key(&id, POST_ID_WITH_URL_QUEUE_NAME)?;
                 }
             }
@@ -33,12 +35,16 @@ impl RabbitService for UrlExtractor {
     }
 
     fn on_stream_finished(&self, bin_exchange: &BinaryExchange) -> Result<()> {
-        bin_exchange.send_with_key(&Message::EndOfStream, POST_EXTRACTED_URL_QUEUE_NAME)?;
-        bin_exchange.send_with_key(&Message::EndOfStream, POST_ID_WITH_URL_QUEUE_NAME)
+        for _ in 0..self.consumers {
+            bin_exchange.send_with_key(&Message::EndOfStream, POST_EXTRACTED_URL_QUEUE_NAME)?;
+            bin_exchange.send_with_key(&Message::EndOfStream, POST_ID_WITH_URL_QUEUE_NAME)?;
+        }
+        Ok(())
     }
 }
 
 fn run_service(config: Config) -> Result<()> {
-    let mut service = UrlExtractor;
+    let consumers = str::parse::<usize>(&config.consumers).unwrap();
+    let mut service = UrlExtractor {consumers};
     service.run(config, POST_URL_QUEUE_NAME, None)
 }
